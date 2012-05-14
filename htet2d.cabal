@@ -1,0 +1,13 @@
+name:           htet2d
+version:        0.1
+synopsis:       yet another tetris-like game
+author:         Julia Jomantaite
+license:        BSD3
+build-type:     Simple
+cabal-version:  >= 1.2
+
+executable htet2d
+  main-is:        Tetris.hs
+  build-depends:  base >=2, random, containers, array, old-time
+  hs-source-dirs: src
+  GHC-Options:    -O2
