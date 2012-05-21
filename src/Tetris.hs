@@ -1,5 +1,4 @@
-import Control.Monad (void)
-import Data.Array
+import Control.Monad(void)
 import System.IO
 import System.Random
 import System.Time
@@ -20,8 +19,8 @@ main = do oldEcho <- hGetEcho stdin
 getMSeconds :: ClockTime -> Integer
 getMSeconds (TOD sec psec) = sec * 1000 + div psec (10 ^ 9)
 
-toWait :: ClockTime -> ClockTime -> Integer -> Int
-toWait new old mseclvl = fromIntegral (max 0 (mseclvl - (getMSeconds new - getMSeconds old)))
+toWait :: ClockTime -> Integer -> ClockTime -> Int
+toWait old mseclvl new = fromIntegral (max 0 (mseclvl - (getMSeconds new - getMSeconds old)))
 
 pickRandom :: IO Int
 pickRandom = getStdRandom (randomR (0, 4 * figNum - 1))
@@ -30,32 +29,34 @@ processio :: GameStatus -> GameStatus -> ClockTime -> IO ()
 processio gs oldgs lastdown
   | isOver gs = void $ visualize gs oldgs
   | isPaused gs = do visualize gs oldgs
-                     key <- getKey
+                     key <- getChar
                      case key of
-                        "p" -> processio (startGame gs) gs =<< getClockTime
-                        "q" -> return ()
+                        'p' -> processio (startGame gs) gs =<< getClockTime
+                        'q' -> return ()
                         _   -> processio gs oldgs lastdown
   | otherwise = do visualize gs oldgs
                    time <- getClockTime
-                   hasInput <- hWaitForInput stdin $! toWait time lastdown (lvlDelay (getLevel gs))
-                   if not hasInput
-                   then do rand <- pickRandom
-                           processio (timeStep gs rand) gs =<< getClockTime
-                   else do key <- getKey
-                           case key of
-                              "q" -> return ()
-                              _   -> processio (keyAction gs key) gs lastdown
+                   mKey <- getKey $ toWait lastdown (lvlDelay (getLevel gs))
+                   case mKey of
+                     Nothing  -> do rand <- pickRandom
+                                    processio (timeStep gs rand) gs =<< getClockTime
+                     Just "q" -> return ()
+                     Just key -> processio (keyAction gs key) gs lastdown
 
-getKey = do key <- getChar
-            if key == '\27'
-            then do key1 <- getChar
-                    if key1 == '['
-                    then do key2 <- getChar
-                            return [key, key1, key2]
-                    else
-                        return [key, key1]
-            else
-                return [key]
+getKey :: (ClockTime -> Int) -> IO (Maybe String)
+getKey toWaitFunc = getKey' toWaitFunc 0
+
+getKey' toWaitFunc escIndex = do
+    time <- getClockTime
+    hasInput <- hWaitForInput stdin $! toWaitFunc time
+    if hasInput 
+    then do
+         key <- getChar
+         case key of 
+            '\27' -> getKey' toWaitFunc 1
+            '['   -> if escIndex == 1 then getKey' toWaitFunc 2 else return (Just "[")
+            x     -> if escIndex == 2 then return (Just ['\27', '[', x]) else return (Just [x])
+    else return Nothing
 
 timeStep :: GameStatus -> Int -> GameStatus
 timeStep gs rnum
