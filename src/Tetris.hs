@@ -49,14 +49,13 @@ getKey toWaitFunc = getKey' toWaitFunc 0
 getKey' toWaitFunc escIndex = do
     time <- getClockTime
     hasInput <- hWaitForInput stdin $! toWaitFunc time
-    if hasInput 
-    then do
+    if hasInput then do
          key <- getChar
          case key of 
             '\27' -> getKey' toWaitFunc 1
             '['   -> if escIndex == 1 then getKey' toWaitFunc 2 else return (Just "[")
             x     -> if escIndex == 2 then return (Just ['\27', '[', x]) else return (Just [x])
-    else return Nothing
+        else return Nothing
 
 timeStep :: GameStatus -> Int -> GameStatus
 timeStep gs rnum
