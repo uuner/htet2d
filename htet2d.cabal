@@ -11,3 +11,11 @@ executable htet2d
   build-depends:  base >=2, random, containers, array, old-time
   hs-source-dirs: src
   GHC-Options:    -O2
+
+test-suite TestAll
+  type:            exitcode-stdio-1.0
+  ghc-options:     -Wall -rtsopts
+  build-depends:  base, QuickCheck
+  other-modules: 
+  hs-source-dirs:  tests
+  main-is:         TestAll.hs
