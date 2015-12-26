@@ -1,7 +1,10 @@
 module Main where
 
-import System.Exit (exitFailure)
+import Test.Tasty
+import qualified GameLogic as GL (testGroup) 
 
-main = do
-    putStrLn "This test always fails!"
-    exitFailure
+tests :: TestTree
+tests = testGroup "All Tests" [GL.testGroup]
+
+main :: IO ()
+main = defaultMain tests

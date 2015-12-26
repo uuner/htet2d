@@ -1,3 +1,6 @@
+module Main
+where
+
 import Control.Monad(void)
 import System.IO
 import System.Random
@@ -10,9 +13,11 @@ main = do oldEcho <- hGetEcho stdin
           hSetEcho stdin False
           hSetBuffering stdin NoBuffering
           hSetBuffering stdout NoBuffering
-          rand1 <- pickRandom
-          rand2 <- pickRandom
-          let newField = emptyField rand1 rand2
+          randomFigure1 <- pickRandomFigure
+          randomOrient1 <- pickRandomOrientation
+          randomFigure2 <- pickRandomFigure
+          randomOrient2 <- pickRandomOrientation
+          let newField = emptyField randomFigure1 randomOrient1 randomFigure2 randomOrient2
           processio (startGame newField) newField =<< getClockTime
           hSetEcho stdin oldEcho
 
@@ -22,8 +27,13 @@ getMSeconds (TOD sec psec) = sec * 1000 + div psec (10 ^ 9)
 toWait :: ClockTime -> Integer -> ClockTime -> Int
 toWait old mseclvl new = fromIntegral (max 0 (mseclvl - (getMSeconds new - getMSeconds old)))
 
-pickRandom :: IO Int
-pickRandom = getStdRandom (randomR (0, 4 * figNum - 1))
+pickRandomOrientation :: IO Orientation
+pickRandomOrientation = fmap toEnum $ getStdRandom $ randomR 
+    (fromEnum (minBound :: Orientation), fromEnum (maxBound :: Orientation))
+
+pickRandomFigure :: IO Figure
+pickRandomFigure = fmap toEnum $ getStdRandom $ randomR 
+    (fromEnum (minBound :: Figure), fromEnum (maxBound :: Figure))
 
 processio :: GameStatus -> GameStatus -> ClockTime -> IO ()
 processio gs oldgs lastdown
@@ -38,8 +48,11 @@ processio gs oldgs lastdown
                    time <- getClockTime
                    mKey <- getKey $ toWait lastdown (lvlDelay (getLevel gs))
                    case mKey of
-                     Nothing  -> do rand <- pickRandom
-                                    processio (timeStep gs rand) gs =<< getClockTime
+                     Nothing  -> do randomFigure <- pickRandomFigure
+                                    randomOrient <- pickRandomOrientation
+                                    processio (case nextStep gs of
+                                        Right g -> g
+                                        Left g -> g (randomFigure, randomOrient)) gs =<< getClockTime
                      Just "q" -> return ()
                      Just key -> processio (keyAction gs key) gs lastdown
 
@@ -57,20 +70,14 @@ getKey' toWaitFunc escIndex = do
             x     -> if escIndex == 2 then return (Just ['\27', '[', x]) else return (Just [x])
         else return Nothing
 
-timeStep :: GameStatus -> Int -> GameStatus
-timeStep gs rnum
-  | can $ moveDown gs = moveDown gs
-  | otherwise = concrete gs rnum
-
 keyAction :: GameStatus -> String -> GameStatus
 keyAction gs key
   | key == "p" = pauseGame gs
-  | key == "a" || key == "\27[D" = tryDo (moveLeft gs) gs
-  | key == "d" || key == "\27[C" = tryDo (moveRight gs) gs
-  | key == "s" || key == "\27[B" = tryDo (moveDown gs) gs
-  | key == "w" || key == "\27[A" = tryDo (rotateRight gs) gs
+  | key == "a" || key == "\27[D" = moveLeft gs
+  | key == "d" || key == "\27[C" = moveRight gs
+  | key == "s" || key == "\27[B" = moveDown gs
+  | key == "w" || key == "\27[A" = turnRight gs
   | key == " " = dropDown gs
   | otherwise = gs
-  where tryDo moved original = if can moved then moved else original
 
 lvlDelay n = ([1000, 900 .. 200] ++ [150] ++ repeat 100) !! n
