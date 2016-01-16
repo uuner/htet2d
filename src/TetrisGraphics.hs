@@ -4,13 +4,13 @@ import Data.Map (Map, empty, notMember, fromList, union, member, delete, (!))
 import Tetris2D
 
 fieldStr :: GameStatus -> [[(Color, Char)]]
-fieldStr gs@Game{getDebris = debris, getCurrentFigure = fig, getCurrentPosition = pos} = [[
+fieldStr gs@Game{_debris = debris, _currentFigure = fig, _currentPosition = pos} = [[
     if member (Coord x y) figures then (color (figures ! Coord x y), 'X') else (0, ' ') 
     | x <- [0..fieldWidth-1]] | y <- [0..fieldHeight - 1]]
     where figures = debris `union` figureAsDebris fig pos
 
 fieldStrs :: GameStatus -> [String]
-fieldStrs gs@Game{getDebris = debris, getCurrentFigure = fig, getCurrentPosition = pos} =
+fieldStrs gs@Game{_debris = debris, _currentFigure = fig, _currentPosition = pos} =
     [concatMap (\x -> if member (Coord x y) allDebris then coloredCell (color (allDebris ! Coord x y), 'X') else " ") [0..fieldWidth-1] | y <- [0..fieldHeight - 1]]
     where allDebris = debris `union` figureAsDebris fig pos
 
@@ -24,9 +24,9 @@ visualize gs oldgs = if isNotStarted oldgs then putStr $! outstr else putStr $! 
       moveCursor 1 (3 + fieldHeight)
   wholeColoredField = map (concatMap coloredCell) (fieldStr gs)
   changestr = redrawFigureDiffs 
-      ++ (if getScores gs /= getScores oldgs then drawScores gs else "")
+      ++ (if _scores gs /= _scores oldgs then drawScores gs else "")
       ++ (if getLevel gs /= getLevel oldgs then drawLevel gs else "")
-      ++ (if getNext gs /= getNext oldgs then drawNext gs else "")
+      ++ (if _next gs /= _next oldgs then drawNext gs else "")
       ++ (if isOver gs then moveCursor 2 10 ++ "GAME OVER!" else "")
       ++ drawPause gs oldgs
       ++ moveCursor 1 (3+fieldHeight)
@@ -40,14 +40,14 @@ drawPause gs oldgs
   | isPaused gs && not (isPaused oldgs) = moveCursor 16 11 ++ "PAUSED"
   | isPaused oldgs && not (isPaused gs) = moveCursor 16 11 ++ "      "
   | otherwise = "" 
-drawScores gs = moveCursor 17 10 ++ show (getScores gs)
+drawScores gs = moveCursor 17 10 ++ show (_scores gs)
 drawLevel gs = moveCursor 18 13 ++ show (getLevel gs)
 drawNext gs = concat [moveCursor 16 (4+n) ++ nextFig!!n | n <- [0..(length nextFig - 1)]]
   where
   upTo4 n xs = if length xs < 4 then xs ++ replicate (4 - length xs) n else xs
   nextFig = map (concatMap (\a -> if a then coloredCell (color nextFigure, 'X') else " ")) $
               upTo4 [False, False, False, False] (map (upTo4 False) (rotatedShape nextFigure nextOrient))  
-  next@(nextFigure, nextOrient) = getNext gs
+  next@(nextFigure, nextOrient) = _next gs
 
 addBorder st = horizLine : (map (\a -> "|"++ a ++ "|") st ++ [horizLine])
 horizLine    = "+" ++ replicate fieldWidth '-' ++ "+"

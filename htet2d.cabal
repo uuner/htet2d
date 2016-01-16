@@ -8,13 +8,13 @@ cabal-version:  >= 1.8
 
 executable htet2d
   main-is:        Tetris.hs
-  build-depends:  base, random, containers, array, old-time
+  build-depends:  base, random, containers, array, old-time, lens
   hs-source-dirs: src
   GHC-Options:    -O2
 
 library
   hs-source-dirs: src
-  build-depends:  base, random, containers, array, old-time
+  build-depends:  base, random, containers, array, old-time, lens
   exposed-modules: Tetris2D, TetrisGraphics
 
 test-suite TestAll

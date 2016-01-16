@@ -1,7 +1,9 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Tetris2D (Coord(..), Position(..), fieldHeight, fieldWidth, Figure(..), figureAsDebris, GameStatus(..), getLevel, isNotStarted, isOver, isPaused, rotatedShape, emptyField, startGame, nextStep, Orientation(..), pauseGame, moveLeft, moveRight, moveDown, turnRight, dropDown, rotateRight, isValid, State(..))
 where
 
+import Control.Lens
 import Data.Map (Map, empty, mapKeys, notMember, fromList, union, member, delete, (!))
 import Data.List (sortBy)
 
@@ -44,53 +46,51 @@ rotatedShape fig W = [reverse $ map (!! n) x | let x = shape fig, n <-[0..length
 rotateRight o = if o == maxBound then minBound else succ o
 rotateLeft o = if o == minBound then maxBound else pred o
 
-data Coord = Coord {
-    getX :: Int,
-    getY :: Int
-    } deriving (Eq, Ord, Show)  
+data Coord = Coord {_x :: Int, _y :: Int } deriving (Eq, Ord, Show)
+makeLenses ''Coord
 
-data Position = Position {
-    getCoord :: Coord, 
-    getOrientation :: Orientation
-    } deriving (Eq, Show)
+data Position = Position {_coord :: Coord, _orientation :: Orientation} deriving (Eq, Show)
+makeLenses ''Position
 
 type Score = Integer
 data State = NotStarted | InProgress | Paused | Finished deriving (Eq, Show)
 type Debris = Map Coord Figure
 
 data GameStatus = Game {
-    getDebris :: Debris,              -- array of fallen figures
-    getCurrentFigure :: Figure,       -- current figure
-    getCurrentPosition :: Position,   -- position of the current figure
-    getNext :: (Figure, Orientation), -- next figure
-    getScores :: Score,               -- score
-    getGameState :: State,            -- is finished
-    getLines :: Int -- eaten lines - we need them to change level
+    _debris :: Debris,              -- array of fallen figures
+    _currentFigure :: Figure,       -- current figure
+    _currentPosition :: Position,   -- position of the current figure
+    _next :: (Figure, Orientation), -- next figure
+    _scores :: Score,               -- score
+    _gameState :: State,            -- is finished
+    _lines :: Int                   -- eaten lines - we need them to change level
     } deriving (Eq, Show)
-getLevel status = min 10 (div (getLines status) 12)
+getLevel status = min 10 (div (_lines status) 12)
+
+makeLenses ''GameStatus
 
 emptyField :: Figure -> Orientation -> Figure -> Orientation -> GameStatus
 emptyField randomFigure1 randomOrient1 randomFigure2 randomOrient2 = Game {
-    getDebris = empty,
-    getCurrentFigure = randomFigure1, 
-    getCurrentPosition = initFigurePosition randomFigure1 randomOrient1,
-    getNext = (randomFigure2, randomOrient2),
-    getScores = 0,
-    getGameState = NotStarted,
-    getLines = 0
+    _debris = empty,
+    _currentFigure = randomFigure1,
+    _currentPosition = initFigurePosition (randomFigure1, randomOrient1),
+    _next = (randomFigure2, randomOrient2),
+    _scores = 0,
+    _gameState = NotStarted,
+    _lines = 0
   }
 
-finishGame status = status { getGameState = Finished }
-startGame  status = status { getGameState = InProgress }
-pauseGame  status = status { getGameState = Paused }
+finishGame = gameState .~ Finished
+startGame  = gameState .~ InProgress
+pauseGame  = gameState .~ Paused
 
-initFigurePosition :: Figure -> Orientation -> Position
-initFigurePosition fig o = Position {
-    getCoord = Coord {
-      getX = fieldWidth `div` 2 - 1 + voidleft,
-      getY = 2 - length sh + voidbelow
+initFigurePosition :: (Figure, Orientation) -> Position
+initFigurePosition (fig, o) = Position {
+    _coord = Coord {
+      _x = fieldWidth `div` 2 - 1 + voidleft,
+      _y = 2 - length sh + voidbelow
     },
-    getOrientation = o
+    _orientation = o
   }
   where
   sh = rotatedShape fig o
@@ -99,38 +99,30 @@ initFigurePosition fig o = Position {
 
 getOccupiedBlocks :: Figure -> Position -> [Coord]
 getOccupiedBlocks fig pos =
-   map toCoord $ truthOnly $ withNumbers $ rotatedShape fig $ getOrientation pos
-  where 
+   map toCoord $ truthOnly $ withNumbers $ rotatedShape fig $ pos ^. orientation
+  where
   withNumbers = concat . zipWithY . zipWithX
-  zipWithX = map (zip [getX (getCoord pos)..])
-  zipWithY = zipWith (\a -> map (a,)) [getY (getCoord pos)..]
+  zipWithX = map (zip [pos ^. coord ^. x ..])
+  zipWithY = zipWith (\a -> map (a,)) [pos ^. coord ^. y ..]
   truthOnly = filter (snd . snd)
   toCoord (yy, (xx, _)) = Coord xx yy
 
 isValid :: GameStatus -> Bool
 isValid status =
     all (\coord@(Coord x y) -> x >= 0 && x < fieldWidth && y < fieldHeight
-        && notMember coord (getDebris status)
-    ) $ getOccupiedBlocks (getCurrentFigure status) (getCurrentPosition status)
+        && notMember coord (status ^. debris)
+    ) $ getOccupiedBlocks (status ^. currentFigure) (status ^. currentPosition)
 
-moveIfValid gs moved = if isValid moved then moved else gs
-moveLeft gs@Game {getCurrentPosition = p@Position {getCoord = c@Coord {getX = x}}} =
-    moveIfValid gs gs { getCurrentPosition = p {getCoord = c{getX = x - 1}}}
+moveIfValid movement gs = let moved = movement gs in if isValid moved then moved else gs
 
-moveRight gs@Game {getCurrentPosition = p@Position {getCoord = c@Coord {getX = x}}} =
-    moveIfValid gs gs { getCurrentPosition = p {getCoord = c{getX = x + 1}}}
+turnLeft = moveIfValid $ currentPosition.orientation %~ rotateLeft
+turnRight = moveIfValid $ currentPosition.orientation %~ rotateRight
+moveLeft = moveIfValid $ currentPosition.coord.x -~ 1
+moveRight = moveIfValid $ currentPosition.coord.x +~ 1
+moveDownUnverified = currentPosition.coord.y +~ 1
+moveDown = moveIfValid moveDownUnverified
 
-moveDownUnverified gs@Game {getCurrentPosition = p@Position {getCoord = c@Coord {getY = y}}} =
-    gs { getCurrentPosition = p {getCoord = c{getY = y + 1}}}
-
-moveDown gs@Game {getCurrentPosition = p@Position {getCoord = c@Coord {getY = y}}} =
-    let moved = moveDownUnverified gs in if isValid moved then moved else gs
-
-turnLeft gs@Game { getCurrentPosition = p@Position {getOrientation = o }} =
-    moveIfValid gs gs { getCurrentPosition = p {getOrientation = rotateLeft o}}
-
-turnRight gs@Game { getCurrentPosition = p@Position {getOrientation = o }} =
-    moveIfValid gs gs { getCurrentPosition = p {getOrientation = rotateRight o}}
+validator change good bad st = if isValid (change st) then good st else bad st
 
 dropDown gs = if isValid moved then dropDown moved else gs
   where moved = moveDownUnverified gs
@@ -143,29 +135,27 @@ scoreIncrement lines =
       3 -> 300
       _ -> 1200
 
-concrete gs randomNext = if isValid newState then newState else newState {getGameState = Finished}
-    where 
-    newState = gs { 
-        getDebris = newDebris,
-        getCurrentFigure = oldNextFigure, 
-        getCurrentPosition = initFigurePosition oldNextFigure oldNextOrientation,
-        getNext = randomNext,
-        getScores = getScores gs + scoreIncrement (length extraRows),
-        getLines = getLines gs + length extraRows 
-    }
-    debrisWithExtraRows = getDebris gs `union` figureAsDebris (getCurrentFigure gs) (getCurrentPosition gs)
+concrete gs randomNext = if isValid newState then newState else finishGame newState
+    where
+    newState =
+        ( (debris .~ newDebris)
+        . (currentFigure .~ (fst $ gs ^. next))
+        . (currentPosition .~ (initFigurePosition (gs ^. next)))
+        . (next .~ randomNext)
+        . (scores +~ scoreIncrement (length extraRows))
+        . (Tetris2D.lines +~ length extraRows)) gs
+    debrisWithExtraRows = _debris gs `union` figureAsDebris (_currentFigure gs) (_currentPosition gs)
     extraRows = [row | y <- [0..fieldHeight - 1], let row = [Coord x y | x <- [0..fieldWidth - 1]], all (`member` debrisWithExtraRows) row]
-    (oldNextFigure, oldNextOrientation) = getNext gs
-    extraRowNumbers = sortBy (flip compare) (map (getY . head) extraRows)
-    newDebris = mapKeys (\c@Coord {getY = y} -> c {getY = y + length (takeWhile (>=y) extraRowNumbers)}  ) $
-      foldl (flip delete) debrisWithExtraRows (concat extraRows) 
+    extraRowNumbers = sortBy (flip compare) (map (_y . head) extraRows)
+    newDebris = mapKeys (\c@Coord {_y = y} -> c {_y = y + length (takeWhile (>=y) extraRowNumbers)}  ) $
+      foldl (flip delete) debrisWithExtraRows (concat extraRows)
 
-nextStep gs = let next = moveDownUnverified gs 
+nextStep gs = let next = moveDownUnverified gs
               in if isValid next then Right next else Left $ concrete gs
 
-isOver status = getGameState status == Finished
-isNotStarted status = getGameState status == NotStarted
-isPaused status = getGameState status == Paused
+isOver status = _gameState status == Finished
+isNotStarted status = _gameState status == NotStarted
+isPaused status = _gameState status == Paused
 
 figureAsDebris fig pos = fromList $ zip (getOccupiedBlocks fig pos) (repeat fig)
 
